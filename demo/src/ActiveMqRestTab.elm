@@ -9,6 +9,7 @@ import Mwc.Button
 import Mwc.TextField
 import ActiveMq as AMQ
 import Json.Encode as E
+import Json.Decode as D
 import Http
 
 configuration : AMQ.Configuration
@@ -42,12 +43,26 @@ publishRequest model =
     in
         AMQ.publishRequest configuration PersonPublicationResult body
 
+personDecoder : D.Decoder Person
+personDecoder =
+    D.map2 Person (D.field "name" D.string) (D.maybe (D.field "age" D.int))
+
+jsonStringToPerson : String -> Result String Person
+jsonStringToPerson string =
+    D.decodeString personDecoder string
+        |> Result.mapError D.errorToString
+
+consumeRequest : Model -> Cmd Msg
+consumeRequest model =
+    AMQ.consumeRequest configuration PersonConsumptionResult jsonStringToPerson
 
 type alias Model =
     { name : String
     , age : Maybe Int
     , publishing : Bool
+    , consuming : Bool
     , publicationResult : Maybe (Result Http.Error AMQ.PublicationResult)
+    , consumptionResult : Maybe (Result Http.Error Person)
     }
 
 
@@ -56,7 +71,9 @@ init =
     { name = "John"
     , age = Just 42
     , publishing = False
+    , consuming = False
     , publicationResult = Nothing
+    , consumptionResult = Nothing
     }
 
 
@@ -65,6 +82,8 @@ type Msg
     | AgeEdited String
     | PublishPersonToActiveMq
     | PersonPublicationResult (Result Http.Error AMQ.PublicationResult)
+    | ConsumePersonFromActiveMq
+    | PersonConsumptionResult (Result Http.Error Person)
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -121,6 +140,26 @@ update msg model =
                 , Cmd.none
                 )
 
+        ConsumePersonFromActiveMq ->
+            ( { model
+              | consuming = True
+              , consumptionResult = Nothing
+              }
+            , consumeRequest model
+            )
+
+        PersonConsumptionResult result ->
+            let
+                _ = Debug.log "consumption result" result
+            in
+                ( { model
+                  | consuming = False
+                  , consumptionResult = Just result
+                  }
+                , Cmd.none
+                )
+
+
 personPublishDataView : Model -> Html Msg
 personPublishDataView model =
     div
@@ -129,11 +168,13 @@ personPublishDataView model =
             [ Mwc.TextField.inputType "text"
             , Mwc.TextField.value model.name
             , Mwc.TextField.onInput NameEdited
+            , Mwc.TextField.placeHolder "(name)"
             ]
         , Mwc.TextField.view
             [ Mwc.TextField.inputType "number"
             , Mwc.TextField.value (Maybe.map String.fromInt model.age |> Maybe.withDefault "")
             , Mwc.TextField.onInput AgeEdited
+            , Mwc.TextField.placeHolder "(age)"
             ]
         ]
 
@@ -190,6 +231,53 @@ personPublicationResultView model =
                 ]
             ]
 
+personConsumeButton : Model -> Html Msg
+personConsumeButton model =
+    Mwc.Button.view
+        [ Mwc.Button.raised
+        , Mwc.Button.disabled model.consuming
+        , Mwc.Button.onClick ConsumePersonFromActiveMq
+        , Mwc.Button.label "Consume"
+        ]
+
+personConsumptionView : Model -> Html Msg
+personConsumptionView model =
+    case model.consumptionResult of
+        Nothing ->
+            Mwc.TextField.view
+                [ Mwc.TextField.value "(nothing consumed yet)"
+                , Mwc.TextField.readonly True
+                , Mwc.TextField.noOp
+                , Mwc.TextField.textArea
+                ]
+        Just consumptionResult ->
+            case consumptionResult of
+                Err httpError ->
+                    Mwc.TextField.view
+                        [ Mwc.TextField.value <| httpErrorToString httpError
+                        , Mwc.TextField.readonly True
+                        , Mwc.TextField.noOp
+                        , Mwc.TextField.textArea
+                        ]
+                Ok person ->
+                    div
+                        []
+                        [ Mwc.TextField.view
+                            [ Mwc.TextField.inputType "text"
+                            , Mwc.TextField.value person.name
+                            , Mwc.TextField.readonly True
+                            , Mwc.TextField.noOp
+                            ]
+                        , Mwc.TextField.view
+                            [ Mwc.TextField.inputType "text"
+                            , Mwc.TextField.value (Maybe.map String.fromInt person.age |> Maybe.withDefault "(undefined)")
+                            , Mwc.TextField.readonly True
+                            , Mwc.TextField.noOp
+                            ]
+                        ]
+
+
+
 view : Model -> Html Msg
 view model =
     div
@@ -197,4 +285,6 @@ view model =
         [ personPublishDataView model
         , personPublishButton model
         , personPublicationResultView model
+        , personConsumeButton model
+        , personConsumptionView model
         ]

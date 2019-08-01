@@ -85,6 +85,7 @@ function gotRequest(request,response,serve){
                 }
 
                 response.headers = proxiedResponse.headers;
+                response.statusCode = proxiedResponse.statusCode;
 
                 serve(request, response, proxiedBody);
 
