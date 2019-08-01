@@ -1,0 +1,10 @@
+# elm-package generated files
+elm-stuff
+# elm-repl generated files
+repl-temp-*
+# elm make src/Main.elm --output main.js
+main.js
+# node
+node_modules
+# webpack
+dist

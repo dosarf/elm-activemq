@@ -1,0 +1,14 @@
+{
+  "port": 8080,
+  "relativeRoot": "/dist/",
+  "rules": [
+      {
+        "target" : "ActiveMQ",
+        "test" : "/api/message/",
+        "forward" : {
+          "host" : "localhost",
+          "port" : 8161
+        }
+      }
+  ]
+}
