@@ -24,9 +24,13 @@ defaultPort : Port
 defaultPort =
     Port 8161
 
+{-| A tuple of user/password string pair.
+-}
 type Credentials =
     Credentials (String, String)
 
+{-| JMS destinations are either queues or topics. Both type have a name.
+-}
 type Destination =
     Queue String
     | Topic String
@@ -105,15 +109,21 @@ expectMessageSent result =
         Ok badBody ->
             Err (Http.BadBody badBody)
 
+{-| Given
+- a configuration,
+- a message (constructor) taking `Result Http.Error PublicationResult`
+- an HTTP body you want to publish
 
+it constructs a POST request that will try to publish to ActiveMQ, based
+on your configuration. Success/failure responses will lead to a message of
+the type of your choice.
+-}
 publishRequest : Configuration -> (Result Http.Error PublicationResult -> msg) -> Http.Body -> Cmd msg
 publishRequest configuration_ msgConstructor body =
     Http.request
         { method = "POST"
         , headers =
             [ Http.header "Authorization" <| authenticationOf configuration_
-            -- , Http.header "Content-Type" "text/plain"
-            -- , Http.header "Content-Length" <| String.length messageBody
             ]
         , url = urlOf configuration_
         , body = body
