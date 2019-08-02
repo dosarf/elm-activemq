@@ -1,16 +1,22 @@
 module ActiveMqRestTab exposing (
-    Model, Msg, init, update, view
-    , Person, personToJsonObject)
+    Model
+    , Msg
+    , init
+    , update
+    , view)
 
 import Css exposing (px, width)
-import Html.Styled exposing (Html, div)
+import Html.Styled exposing (Html, div, table, tr, td)
 import Html.Styled.Attributes exposing (css)
 import Mwc.Button
 import Mwc.TextField
 import ActiveMq as AMQ
+import YetAnotherPolling as YAP
 import Json.Encode as E
 import Json.Decode as D
 import Http
+import Task
+import Process
 
 configuration : AMQ.Configuration
 configuration =
@@ -52,10 +58,6 @@ jsonStringToPerson string =
     D.decodeString personDecoder string
         |> Result.mapError D.errorToString
 
-consumeRequest : Model -> Cmd Msg
-consumeRequest model =
-    AMQ.consumeRequest configuration PersonConsumptionResult jsonStringToPerson
-
 type alias Model =
     { name : String
     , age : Maybe Int
@@ -63,6 +65,7 @@ type alias Model =
     , consuming : Bool
     , publicationResult : Maybe (Result Http.Error AMQ.PublicationResult)
     , consumptionResult : Maybe (Result AMQ.ConsumptionError Person)
+    , pollingModel : YAP.Model AMQ.ConsumptionError Person Msg
     }
 
 
@@ -74,6 +77,7 @@ init =
     , consuming = False
     , publicationResult = Nothing
     , consumptionResult = Nothing
+    , pollingModel = YAP.init YAP.defaultConfiguration pollingRequestTask decidePolling PersonPollingResult
     }
 
 
@@ -84,7 +88,44 @@ type Msg
     | PersonPublicationResult (Result Http.Error AMQ.PublicationResult)
     | ConsumePersonFromActiveMq
     | PersonConsumptionResult (Result AMQ.ConsumptionError Person)
+    | StartPollingPersonsFromActiveMq
+    | StopPollingPersonsFromActiveMq
+    | PersonPollingResult (Result AMQ.ConsumptionError Person)
 
+consumeRequest : Cmd Msg
+consumeRequest =
+    AMQ.consumeRequest configuration PersonConsumptionResult jsonStringToPerson
+
+
+pollingRequestTask : () -> Task.Task AMQ.ConsumptionError Person
+pollingRequestTask () =
+    AMQ.consumeRequestTask configuration jsonStringToPerson
+
+
+decidePolling : Result AMQ.ConsumptionError Person -> YAP.PollingDecision
+decidePolling result =
+    case result of
+        Ok _ ->
+            YAP.PollOne
+
+        Err (AMQ.BadUrl _)->
+            YAP.QuitPolling
+
+        Err AMQ.Timeout ->
+            YAP.RetryAfter
+
+        Err AMQ.NetworkError ->
+            YAP.RetryAfter
+
+        -- this is a bit oversimplifying things, but anyway ...
+        Err (AMQ.BadStatus _) ->
+            YAP.QuitPolling
+
+        Err AMQ.NoMessage ->
+            YAP.PollOne
+
+        Err (AMQ.BadBody _) ->
+            YAP.QuitPolling
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
@@ -145,7 +186,7 @@ update msg model =
               | consuming = True
               , consumptionResult = Nothing
               }
-            , consumeRequest model
+            , consumeRequest
             )
 
         PersonConsumptionResult result ->
@@ -159,6 +200,41 @@ update msg model =
                 , Cmd.none
                 )
 
+        StartPollingPersonsFromActiveMq ->
+            let
+                ( pollingModel, cmd ) =
+                    YAP.start model.pollingModel
+            in
+                ( { model
+                  | consumptionResult = Nothing
+                  , pollingModel = pollingModel
+                  }
+                , cmd
+                )
+
+        StopPollingPersonsFromActiveMq ->
+            let
+                ( pollingModel, cmd ) =
+                    YAP.stop model.pollingModel
+            in
+                ( { model
+                  | consumptionResult = Nothing
+                  , pollingModel = pollingModel
+                  }
+                , cmd
+                )
+
+        PersonPollingResult result ->
+            let
+                ( pollingModel, cmd ) =
+                    YAP.update result model.pollingModel
+            in
+                ( { model
+                  | consumptionResult = Just result
+                  , pollingModel = pollingModel
+                  }
+                , cmd
+                )
 
 personPublishDataView : Model -> Html Msg
 personPublishDataView model =
@@ -259,8 +335,28 @@ personConsumeButton model =
         [ Mwc.Button.raised
         , Mwc.Button.disabled model.consuming
         , Mwc.Button.onClick ConsumePersonFromActiveMq
-        , Mwc.Button.label "Consume"
+        , Mwc.Button.label "Consume one"
         ]
+
+startStopPollingButton : Model -> Html Msg
+startStopPollingButton model =
+    let
+        pollingState = YAP.stateOf model.pollingModel
+    in
+        Mwc.Button.view
+            [ Mwc.Button.raised
+            , Mwc.Button.disabled <| pollingState == YAP.QuittingPolling
+            , Mwc.Button.onClick <|
+                if pollingState == YAP.NotPolling then
+                    StartPollingPersonsFromActiveMq
+                else
+                    StopPollingPersonsFromActiveMq
+            , Mwc.Button.label <|
+                if pollingState == YAP.NotPolling then
+                    "Start polling"
+                else
+                    "Stop polling"
+            ]
 
 personConsumptionView : Model -> Html Msg
 personConsumptionView model =
@@ -303,10 +399,23 @@ personConsumptionView model =
 view : Model -> Html Msg
 view model =
     div
-        [ css [ width (px 300) ] ]
-        [ personPublishDataView model
-        , personPublishButton model
-        , personPublicationResultView model
-        , personConsumeButton model
-        , personConsumptionView model
+        [ css [ width (px 600) ] ]
+        [ table
+              []
+              [ tr
+                  []
+                  [ td
+                      []
+                      [ personPublishDataView model
+                      , personPublishButton model
+                      , personPublicationResultView model
+                      ]
+                  , td
+                      []
+                      [ personConsumeButton model
+                      , startStopPollingButton model
+                      , personConsumptionView model
+                      ]
+                  ]
+              ]
         ]

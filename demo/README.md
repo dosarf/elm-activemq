@@ -1,12 +1,13 @@
 
-# findfirstunique-elm
-Sample SPA webapp
+# ActiveMQ demo
 
-- example for Elm itself
-- example config webpack + elm-webpack-loader
-- example usage material-components (multiple tabs)
-- one tab (app) is standard Elm increase/decrease
-- other is finding first unique item in a list of strings
+- example for `dosarf/elm-activemq`
+- as well as for `dosarf/elm-yet-another-polling`
+
+## Pre-requisites
+
+Obviously you need an ActiveMQ installation:
+[download](https://activemq.apache.org/) it, unzip it and start its service.
 
 ## Building distribution
 
@@ -20,30 +21,22 @@ Install
 - `npm run build`
 - built app distribution is under `dist/`
 
-## Running
+## Cross-Origin Resource Sharing
 
-Unfortunately, the Elm APP, if loaded from file system, is not able to interact
-with ActiveMQ service, due to stuff like
-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS/Errors/CORSDidNotSucceed .
+You need to set up your ActiveMQ for
+[Cross-Origin Resource Sharing (CORS)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
+correctly.
 
-Running ActiveMQ service on localhost does not help either.
+That's a bit of a bother, so in order to run this demo, you could use the Node JS
+script `local-proxy.js`.
 
-So, to circumvent the problem, a little hack is employed: `local-proxy.js`.
+It requires Node module `node-http-server`, after installing that, you can just
+`node local-proxy.js`. It will start on port 8080, will serve the static files
+of this demo application as well as act as a reverse proxy to your ActiveMQ service.
+* In case you are not running ActiveMQ locally, or on a port different to the
+	default ones, configure `local-proxy-configuration.json`.
 
-### Starting `local-proxy.js`
+## Running the demo app
 
-- Install `node-http-server`: `npm install node-http-server`
-- Configure the port `local-proxy.js` should listen to, if 8080 is not suitable
-- Configure ActiveMQ forward host in `local-proxy-configuration-json`
-  - in case of ActiveMQ's web service are not running on 8161,
-		the forward port too
-- Run `node local-proxy.js`
-
-Once `local-proxy.js` is running, point your browser at where `local-proxy`
-is running:
-- the Elm app should load
-- and ActiveMQ message publishing should also work.
-
-## Testing Elm stuff
-
-Run `elm test`
+Having `local-proxy.js` started, this demo app should be able to both load
+and publish / consume from ActiveMQ service. The demo queue used is `elm.queue`.

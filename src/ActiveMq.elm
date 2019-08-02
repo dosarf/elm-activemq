@@ -7,20 +7,45 @@ module ActiveMq exposing (
     , Destination (..)
     , Host (..)
     , Port (..)
-    , PublicationResult (..)
-    , ConsumptionError (..)
-    , publishRequest, consumeRequest
+    , publishRequest, PublicationResult (..)
+    , consumeRequest, consumeRequestTask, ConsumptionError (..)
     , urlOf, authenticationOf)
+
+{-| A package for very simplistic interaction with ActiveMQ REST API.
+
+## Configuration
+
+@docs ConfigParams, Configuration, configuration, Credentials, defaultPort, Destination, Host, Port
+
+## Publishing
+
+@docs PublicationResult, publishRequest
+
+## Consuming
+
+@docs consumeRequest, consumeRequestTask, ConsumptionError
+
+## Misc
+
+@docs urlOf, authenticationOf
+-}
 
 import Base64 as B64
 import Http
+import Task
 
+{-| Host of the ActiveMQ service.
+-}
 type Host =
     Host String
 
+{-| TCP Port of the ActiveMQ REST API service, see [`defaultPort`](#defaultPort).
+-}
 type Port =
     Port Int
 
+{-| Default TCP port of the REST API of ActiveMQ installations, 8161.
+-}
 defaultPort : Port
 defaultPort =
     Port 8161
@@ -36,6 +61,8 @@ type Destination =
     Queue String
     | Topic String
 
+{-| A record carrying parameters for constructing a [`Configuration`](#Configuration).
+-}
 type alias ConfigParams =
     { host : Host
     , port_ : Port
@@ -48,9 +75,13 @@ type alias ConfigurationData =
     , authentication : String
     }
 
+{-| A configuration needed to publish / consume, see [`configuration`](#configuration).
+-}
 type Configuration =
     Configuration ConfigurationData
 
+{-| Constructs a [`Configuration`](#Configuration) based in config params.
+-}
 configuration : ConfigParams -> Configuration
 configuration configParams =
     let
@@ -85,18 +116,26 @@ configuration configParams =
                 authorizationHeaderValue
             }
 
+{-| The URL of a [`Configuration`](#Configuration)
+to be used by publish/consume requests.
+-}
 urlOf : Configuration -> String
 urlOf configuration_ =
     case configuration_ of
         Configuration { url, authentication } ->
             url
 
+{-| The authentication details of a [`Configuration`](#Configuration)
+to be used by publish/consume requests.
+-}
 authenticationOf : Configuration -> String
 authenticationOf configuration_ =
     case configuration_ of
         Configuration { url, authentication } ->
             authentication
 
+{-| The result of a publication attempt (can only convey success for now).
+-}
 type PublicationResult =
     Success
 
@@ -111,16 +150,16 @@ expectMessageSent result =
             Err (Http.BadBody badBody)
 
 {-| Given
-- a configuration,
-- a message (constructor) taking `Result Http.Error PublicationResult`
-- an HTTP body you want to publish
+* a configuration,
+* a `createMessage` function turning the result of a publication into a
+  message of your choice,
+* an HTTP body you want to publish,
 
 it constructs a POST request that will try to publish to ActiveMQ to configured
-destination. Success/failure responses will lead to a message of
-the type of your choice.
+destination.
 -}
 publishRequest : Configuration -> (Result Http.Error PublicationResult -> msg) -> Http.Body -> Cmd msg
-publishRequest configuration_ msgConstructor body =
+publishRequest configuration_ createMessage body =
     Http.request
         { method = "POST"
         , headers =
@@ -128,19 +167,13 @@ publishRequest configuration_ msgConstructor body =
             ]
         , url = urlOf configuration_
         , body = body
-        , expect = Http.expectString (expectMessageSent >> msgConstructor)
+        , expect = Http.expectString (expectMessageSent >> createMessage)
         , timeout = Nothing
         , tracker = Nothing
         }
 
 {-| Most similar to `Http.Error`, except there is a specific case for not having
-any message to be consumed within the timeframe the call lasted.
-
-The point is, you can immediately re-issue a consumption request after
-receiving a `NoMessage` result, in order to implement polling. But you should
-not immediate re-issue a consumption request in other cases: in some cases
-you might want to back off a bit (e.g. `Timeout`, `NetworkError`) and in some
-other cases you might want to quit your poll loop entirely (e.g. `BadUrl`).
+any message to be consumed within the timeframe the call lasted (`HTTP 204 No Content`).
 -}
 type ConsumptionError =
     BadUrl String
@@ -169,7 +202,7 @@ parseConsumptionResponse parseBody =
             Http.GoodStatus_ metadata body ->
                 if metadata.statusCode == 204 then
                     Err NoMessage
-                    
+
                 else
                     case parseBody body of
                         Ok value ->
@@ -180,34 +213,27 @@ parseConsumptionResponse parseBody =
 
 
 {-| Given
-- a configuration
-- a message (constructor) taking `Result Http.Error some-value-of-yours`
-- a parser turning a body into a `Result String some-value-of-yours`
+* a configuration
+* a `createMessage` function turning the result of a publication into a
+  message of your choice,
+* a parser turning a response body into a result,
 
-you get an HTTP GET requet that will consume a message from configured
+it constructs an HTTP GET request that will consume a message from configured
 destination. Success/failure responses will lead to a message of
 the type of your choice.
 
 You cannot cancel this request right now, and it looks you should not, either:
 the little one-shot JMS consumer created for your request will be there, in
 the context of the REST API servlet within ActiveMQ service, for
-(about) 30 seconds, even if you cancel the HTTP request ("servlet timeout").
+30 seconds by default, even if you cancel the HTTP request ("servlet timeout").
 That means certain loss of any message published between instant of canceling the
 HTTP request and that JMS consumer is being destroyed.
 
-TODO: This is not ready not be used in a loop with the purpose of implementing a
-      manual message polling.
-      - Message successfully consumed, network timeout and "servlet timeout" can
-        be followed by an immediate HTTP request again,
-      - but some other errors (e.g. networking error) should
-        employ some configurable back-off policy,
-      - and perhaps some other type of errors (bad URL, ...) should quit the
-        loop entirely.
-
-      The point is we don't want Elm apps to busy-poll (erroneously) ActiveMQ.
+Do _not_ use this call directly to organize a polling loop, since network failures
+and such will result in very busy polling indeed.
 -}
 consumeRequest : Configuration -> (Result ConsumptionError value -> msg) -> (String -> Result String value) -> Cmd msg
-consumeRequest configuration_ msgConstructor parseBody =
+consumeRequest configuration_ createMessage parseBody =
     Http.request
         { method = "GET"
         , headers =
@@ -215,10 +241,29 @@ consumeRequest configuration_ msgConstructor parseBody =
             ]
         , url = (urlOf configuration_) ++ "&oneShot=true"
         , body = Http.emptyBody
-        , expect = Http.expectStringResponse msgConstructor (parseConsumptionResponse parseBody)
+        , expect = Http.expectStringResponse createMessage (parseConsumptionResponse parseBody)
         , timeout = Nothing
         , tracker = Nothing
         }
+
+{-| Creates a task instead of a command, but otherwise similar to [`consumeRequest`](#consumeRequest).
+
+You may want to use this version to implement correct message pollling loop with back-off
+strategy etc.
+-}
+consumeRequestTask : Configuration -> (String -> Result String value) -> Task.Task ConsumptionError value
+consumeRequestTask configuration_ parseBody =
+    Http.task
+        { method = "GET"
+        , headers =
+            [ Http.header "Authorization" <| authenticationOf configuration_
+            ]
+        , url = (urlOf configuration_) ++ "&oneShot=true"
+        , body = Http.emptyBody
+        , resolver = Http.stringResolver (parseConsumptionResponse parseBody)
+        , timeout = Nothing
+        }
+
 
 basicAuthentication : Credentials -> String
 basicAuthentication credentials =

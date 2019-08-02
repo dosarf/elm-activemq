@@ -81,7 +81,7 @@ view model =
                 [ logo ]
             ]
         , div
-            [ css [ width (px 400) ] ]
+            [ css [ width (px 600) ] ]
             [ Mwc.Tabs.view
                 [ Mwc.Tabs.selected model.currentTab
                 , Mwc.Tabs.onClick SelectTab
