@@ -8,6 +8,7 @@ module ActiveMq exposing (
     , Host (..)
     , Port (..)
     , PublicationResult (..)
+    , ConsumptionError (..)
     , publishRequest, consumeRequest
     , urlOf, authenticationOf)
 
@@ -132,32 +133,50 @@ publishRequest configuration_ msgConstructor body =
         , tracker = Nothing
         }
 
-parseConsumptionResponse : (String -> Result String value) -> (Http.Response String -> Result Http.Error value)
+{-| Most similar to `Http.Error`, except there is a specific case for not having
+any message to be consumed within the timeframe the call lasted.
+
+The point is, you can immediately re-issue a consumption request after
+receiving a `NoMessage` result, in order to implement polling. But you should
+not immediate re-issue a consumption request in other cases: in some cases
+you might want to back off a bit (e.g. `Timeout`, `NetworkError`) and in some
+other cases you might want to quit your poll loop entirely (e.g. `BadUrl`).
+-}
+type ConsumptionError =
+    BadUrl String
+    | Timeout
+    | NetworkError
+    | BadStatus Int
+    | BadBody String
+    | NoMessage
+
+parseConsumptionResponse : (String -> Result String value) -> (Http.Response String -> Result ConsumptionError value)
 parseConsumptionResponse parseBody =
     \response ->
         case response of
             Http.BadUrl_ url ->
-                Err (Http.BadUrl url)
+                Err (BadUrl url)
 
             Http.Timeout_ ->
-                Err Http.Timeout
+                Err Timeout
 
             Http.NetworkError_ ->
-                Err Http.NetworkError
+                Err NetworkError
 
             Http.BadStatus_ metadata body ->
-                Err (Http.BadStatus metadata.statusCode)
+                Err (BadStatus metadata.statusCode)
 
             Http.GoodStatus_ metadata body ->
-                case (metadata.statusCode, parseBody body) of
-                    (204, _) -> -- TODO, avoid parsing if we already know there is no body to speak of
-                        Err Http.Timeout
+                if metadata.statusCode == 204 then
+                    Err NoMessage
+                    
+                else
+                    case parseBody body of
+                        Ok value ->
+                            Ok value
 
-                    (_, Ok value) ->
-                        Ok value
-
-                    (_, Err err) ->
-                        Err (Http.BadBody err)
+                        Err err ->
+                            Err (BadBody err)
 
 
 {-| Given
@@ -187,7 +206,7 @@ TODO: This is not ready not be used in a loop with the purpose of implementing a
 
       The point is we don't want Elm apps to busy-poll (erroneously) ActiveMQ.
 -}
-consumeRequest : Configuration -> (Result Http.Error value -> msg) -> (String -> Result String value) -> Cmd msg
+consumeRequest : Configuration -> (Result ConsumptionError value -> msg) -> (String -> Result String value) -> Cmd msg
 consumeRequest configuration_ msgConstructor parseBody =
     Http.request
         { method = "GET"

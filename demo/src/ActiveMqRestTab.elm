@@ -62,7 +62,7 @@ type alias Model =
     , publishing : Bool
     , consuming : Bool
     , publicationResult : Maybe (Result Http.Error AMQ.PublicationResult)
-    , consumptionResult : Maybe (Result Http.Error Person)
+    , consumptionResult : Maybe (Result AMQ.ConsumptionError Person)
     }
 
 
@@ -83,7 +83,7 @@ type Msg
     | PublishPersonToActiveMq
     | PersonPublicationResult (Result Http.Error AMQ.PublicationResult)
     | ConsumePersonFromActiveMq
-    | PersonConsumptionResult (Result Http.Error Person)
+    | PersonConsumptionResult (Result AMQ.ConsumptionError Person)
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -205,6 +205,28 @@ httpErrorToString httpError =
         Http.BadBody string ->
             "Bad body: " ++ string
 
+consumptionErrorToString : AMQ.ConsumptionError -> String
+consumptionErrorToString consumptionError =
+    case consumptionError of
+        AMQ.BadUrl string ->
+            "Bad URL: " ++ string
+
+        AMQ.Timeout ->
+            "Timeout"
+
+        AMQ.NetworkError ->
+            "Network error"
+
+        AMQ.BadStatus int ->
+            "Bad status: " ++ (String.fromInt int)
+
+        AMQ.BadBody string ->
+            "Bad body: " ++ string
+
+        AMQ.NoMessage ->
+            "No message to consume"
+
+
 publicationResultText : Result Http.Error AMQ.PublicationResult -> String
 publicationResultText result =
     case result of
@@ -252,9 +274,9 @@ personConsumptionView model =
                 ]
         Just consumptionResult ->
             case consumptionResult of
-                Err httpError ->
+                Err consumptionError ->
                     Mwc.TextField.view
-                        [ Mwc.TextField.value <| httpErrorToString httpError
+                        [ Mwc.TextField.value <| consumptionErrorToString consumptionError
                         , Mwc.TextField.readonly True
                         , Mwc.TextField.noOp
                         , Mwc.TextField.textArea
