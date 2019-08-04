@@ -16,8 +16,6 @@ Install
 - Elm 0.19
 - elm-test (with npm)
 - `npm install`
-- (maybe) `elm make src/Main.elm --output temp.html`
-	- to get Elm packages pulled in, CHECK: is this necessary?
 - `npm run build`
 - built app distribution is under `dist/`
 
@@ -27,12 +25,18 @@ You need to set up your ActiveMQ for
 [Cross-Origin Resource Sharing (CORS)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
 correctly.
 
-That's a bit of a bother, so in order to run this demo, you could use the Node JS
-script `local-proxy.js`.
+That's a bit of a bother, so in order to run this demo quickly, you could use
+the Node JS script `local-proxy.js` right here in the root of this demo app
+project folder.
 
-It requires Node module `node-http-server`, after installing that, you can just
-`node local-proxy.js`. It will start on port 8080, will serve the static files
-of this demo application as well as act as a reverse proxy to your ActiveMQ service.
+It requires Node module `node-http-server`, after installing that, you can just do
+
+```> node local-proxy.js
+```
+
+Point your browser to localhost:8080, this little script will serve both the
+static files of this demo app as well as act as a reverse proxy to your
+ActiveMQ service.
 * In case you are not running ActiveMQ locally, or on a port different to the
 	default ones, configure `local-proxy-configuration.json`.
 

@@ -3,7 +3,7 @@
 ActiveMQ has, in addition to its JMS implementation, a
 [REST API](https://activemq.apache.org/rest).
 
-This package provides an simple wrapper for that REST API. You can
+This package provides a simple wrapper for that REST API. You can
 * publish
 * and consume JMS messages.
 
@@ -26,3 +26,12 @@ both produced the same results.
 Chances are you need to set up
 [Cross-Origin Resource Sharing (CORS)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
 correctly.
+
+
+## Demo app
+
+There is no live demo you can go to (sorry), as this package needs an
+ActiveMQ service installation.
+
+You need to build and set up the [demo](https://github.com/dosarf/elm-activemq/tree/master/demo)
+according to its instructions.
