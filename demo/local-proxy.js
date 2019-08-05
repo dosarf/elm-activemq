@@ -50,13 +50,15 @@ console.log(server);
 server.onRequest=gotRequest;
 
 //start the server with a config
-server.deploy(
-    {
-        verbose : true,
-        port : proxyConfig.port,
-        root : __dirname + proxyConfig.relativeRoot
-    }
-);
+const myConfig = new server.Config;
+myConfig.verbose = true;
+myConfig.port = proxyConfig.port;
+myConfig.root = __dirname + proxyConfig.relativeRoot;
+myConfig.contentType['svg'] = 'image/svg+xml';
+
+console.log('Configuration: ' + myConfig);
+
+server.deploy(myConfig);
 
 function gotRequest(request,response,serve){
 
