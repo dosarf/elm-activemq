@@ -3,7 +3,7 @@
     "name": "dosarf/elm-activemq",
     "summary": "Elm wrapper for simple ActiveMQ REST API interaction",
     "license": "MIT",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "exposed-modules": [
         "ActiveMq"
     ],
