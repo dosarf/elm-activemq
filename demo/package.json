@@ -13,18 +13,18 @@
     "errors": "webpack --mode development --display-error-details"
   },
   "dependencies": {
-    "elm-webpack-loader": "^5.0.0",
-    "file-loader": "1.1.10",
-    "loader-utils": "1.1.0",
+    "elm-webpack-loader": "^8.0.0",
+    "file-loader": "6.2.0",
+    "loader-utils": "3.2.1",
     "material-components-elm-js-imports": "^1.3.0",
     "node-http-server": "^8.1.2",
-    "webpack": "^4.33.0",
+    "webpack": "^5.75.0",
     "webpack-dev-server": "^3.7.1"
   },
   "devDependencies": {
-    "css-loader": "^3.0.0",
-    "style-loader": "^0.23.1",
-    "webpack-cli": "^3.3.3"
+    "css-loader": "^6.7.3",
+    "style-loader": "^3.3.1",
+    "webpack-cli": "^5.0.1"
   },
   "repository": {
     "type": "git",
